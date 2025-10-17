@@ -10,9 +10,15 @@
         body {
             background-color: #f8f9fa;
         }
+        .container {
+            max-width: 800px;
+        }
         .summary-card {
-            max-width: 500px;
-            margin: 4rem auto;
+            margin: 4rem auto 0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .table-card {
+            margin: 2rem auto 4rem;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
     </style>
@@ -34,6 +40,26 @@
                 Live data from data.csv
             </div>
         </div>
+
+        <!-- New Product Sales Table -->
+        <div class="card table-card">
+            <div class="card-header">
+                Sales by Product
+            </div>
+            <div class="card-body">
+                <table class="table table-striped" id="product-sales">
+                    <thead>
+                        <tr>
+                            <th scope="col">Product</th>
+                            <th scope="col">Total Sales</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- This will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </main>
 
     <!-- Bootstrap 5 JS Bundle from jsdelivr -->
@@ -42,11 +68,11 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const totalSalesElement = document.getElementById('total-sales');
+            const productSalesTbody = document.querySelector('#product-sales tbody');
 
             async function fetchAndProcessSales() {
                 try {
                     // 1. Fetch the local data.csv file.
-                    // This assumes data.csv is in the same directory as index.html.
                     const response = await fetch('data.csv');
                     if (!response.ok) {
                         throw new Error(`Could not fetch data.csv. Status: ${response.status}`);
@@ -59,25 +85,38 @@
                         throw new Error('CSV file is empty or has only a header row.');
                     }
 
-                    // Get header and find the 'sales' column index (case-insensitive).
+                    // Get headers and find column indices (case-insensitive).
                     const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
                     const salesIndex = headers.indexOf('sales');
+                    const productIndex = headers.indexOf('product');
 
-                    if (salesIndex === -1) {
-                        throw new Error("A 'sales' column was not found in the CSV header.");
+                    if (salesIndex === -1 || productIndex === -1) {
+                        throw new Error("A 'sales' and/or 'product' column was not found in the CSV header.");
                     }
 
-                    // 3. Sum the values in the 'sales' column.
+                    // 3. Aggregate sales by product and calculate total sales.
                     let totalSales = 0;
+                    const productSales = {};
+
                     for (let i = 1; i < lines.length; i++) {
                         const currentLine = lines[i].trim();
                         if (currentLine === '') continue; // Skip empty lines
 
                         const values = currentLine.split(',');
-                        if (values.length > salesIndex) {
+                        if (values.length > Math.max(salesIndex, productIndex)) {
+                            const productName = values[productIndex].trim();
                             const saleValue = parseFloat(values[salesIndex]);
+                            
                             if (!isNaN(saleValue)) {
+                                // Add to total sales
                                 totalSales += saleValue;
+
+                                // Aggregate sales per product
+                                if (productSales[productName]) {
+                                    productSales[productName] += saleValue;
+                                } else {
+                                    productSales[productName] = saleValue;
+                                }
                             }
                         }
                     }
@@ -88,12 +127,34 @@
                         maximumFractionDigits: 2
                     });
 
+                    // 5. Populate the product sales table.
+                    productSalesTbody.innerHTML = ''; // Clear previous content
+                    
+                    // Sort products alphabetically for a consistent order
+                    const sortedProducts = Object.keys(productSales).sort();
+
+                    for (const product of sortedProducts) {
+                        const sales = productSales[product];
+                        const row = productSalesTbody.insertRow();
+                        
+                        const cellProduct = row.insertCell();
+                        cellProduct.textContent = product;
+                        
+                        const cellSales = row.insertCell();
+                        cellSales.textContent = '$' + sales.toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
+                    }
+
                 } catch (error) {
                     console.error('Error processing sales data:', error);
                     totalSalesElement.textContent = 'Error';
                     // Visually indicate the error using Bootstrap classes
                     totalSalesElement.parentElement.classList.remove('text-success');
                     totalSalesElement.parentElement.classList.add('text-danger');
+                    // Show an error in the table as well
+                    productSalesTbody.innerHTML = `<tr><td colspan="2" class="text-center text-danger">Failed to load product data.</td></tr>`;
                 }
             }
 
